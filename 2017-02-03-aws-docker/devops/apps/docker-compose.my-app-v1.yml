@@ -1,0 +1,25 @@
+version: '2'
+services:
+
+  app:
+    image: ${APP_IMAGE_ID}:${APP_TAG}
+    ports:
+      - 8080:8080
+      - 8443:8443
+    environment:
+      JAVA_OPTS: |-
+         -Duser.timezone=UTC
+         -Dconfig.path=/opt/example/${DEPLOYABLE_NAME}.properties.decrypted
+         -Dlogback.configurationFile=/opt/example/logback.xml
+         -Daws.logs.region=${EC2_INSTANCE_REGION}
+         -Dbuild.timestamp="${BUILD_TIMESTAMP}"
+         -Dec2.public-ipv4=${EC2_INSTANCE_PUBLIC_IPV4}
+         -Dtomcat.redirectPort=${TOMCAT_REDIRECT_PORT}
+         -Dtomcat.proxyName=${TOMCAT_PROXY_NAME}
+         -Dtomcat.proxyPort=${TOMCAT_PROXY_PORT}
+         -Dtomcat.redis.enabled=${TOMCAT_REDIS_ENABLED}
+         -Dtomcat.redis.host=${TOMCAT_REDIS_HOST}
+         -Dtomcat.redis.port=${TOMCAT_REDIS_PORT}
+         ${JAVA_OPTS}
+    volumes:
+      - ./data:/opt/example

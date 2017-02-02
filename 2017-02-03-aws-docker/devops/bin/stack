@@ -1,0 +1,143 @@
+#!/bin/bash
+set -e
+
+SCRIPT_PATH=$( cd $(dirname $0) ; pwd -P )
+
+TEMPLATES_DIR=${SCRIPT_PATH}/../cloudformation-templates
+STACKS_DIR=${SCRIPT_PATH}/../cloudformation-stacks
+
+CMD=$1
+STACK=$2
+
+function template_name {
+    # Take name of the template from parameters file, each stack has exactly one parameters file
+    echo $(ls ${STACKS_DIR}/${STACK}/*-parameters.json) \
+        | sed 's/.*\/\(.*\)-parameters.json/\1/'
+}
+
+case "$CMD" in
+        ls)
+            ls -1 ${STACKS_DIR}
+            ;;
+
+        list-exports)
+            aws cloudformation list-exports \
+                --query 'Exports[*][Name, Value]' \
+                --output table
+            ;;
+
+        id)
+            aws cloudformation describe-stacks --stack-name ${STACK} \
+                --query 'Stacks[0].StackId' --output text
+            ;;
+
+        create)
+            TEMPLATE=$(template_name)
+            aws cloudformation create-stack \
+                --stack-name ${STACK} \
+                --template-body file://${TEMPLATES_DIR}/${TEMPLATE}-template.json \
+                --parameters file://${STACKS_DIR}/${STACK}/${TEMPLATE}-parameters.json \
+                --disable-rollback \
+                --capabilities CAPABILITY_IAM
+            ;;
+
+        update)
+            TEMPLATE=$(template_name)
+            aws cloudformation update-stack \
+                --stack-name ${STACK} \
+                --template-body file://${TEMPLATES_DIR}/${TEMPLATE}-template.json \
+                --parameters file://${STACKS_DIR}/${STACK}/${TEMPLATE}-parameters.json \
+                --capabilities CAPABILITY_IAM
+            ;;
+
+        create-change-set)
+            TEMPLATE=$(template_name)
+            CHANGESET_NAME=change$(date -u +%Y%m%dT%H%M%S%Z)
+            aws cloudformation create-change-set \
+                --capabilities CAPABILITY_IAM \
+                --stack-name ${STACK} \
+                --template-body file://${TEMPLATES_DIR}/${TEMPLATE}-template.json \
+                --parameters file://${STACKS_DIR}/${STACK}/${TEMPLATE}-parameters.json \
+                --change-set-name change$(date -u +%Y%m%dT%H%M%S%Z) \
+            && echo ${CHANGESET_NAME} \
+            && echo $0 describe-change-set ${STACK} ${CHANGESET_NAME}
+            ;;
+
+        describe-change-set)
+            CHANGESET_NAME=$3
+            aws cloudformation describe-change-set --stack-name ${STACK} --change-set-name ${CHANGESET_NAME} \
+            && echo $0 execute-change-set ${STACK} ${CHANGESET_NAME}
+            ;;
+
+        execute-change-set)
+            CHANGESET_NAME=$3
+            aws cloudformation execute-change-set --stack-name ${STACK} --change-set-name ${CHANGESET_NAME} \
+            && echo $0 status ${STACK}
+            ;;
+
+        status)
+            aws cloudformation describe-stacks --stack-name ${STACK} \
+                --query 'Stacks[0].StackStatus' --output text
+            ;;
+
+        estimate-template-cost)
+            TEMPLATE=$(template_name)
+            aws cloudformation estimate-template-cost \
+                --template-body file://${TEMPLATES_DIR}/${TEMPLATE}-template.json \
+                --parameters file://${STACKS_DIR}/${STACK}/${TEMPLATE}-parameters.json
+            ;;
+
+        resources)
+            aws cloudformation describe-stack-resources --stack-name ${STACK} \
+                --query 'StackResources[*].[Timestamp,ResourceStatus,PhysicalResourceId,LogicalResourceId]' \
+                --output table
+            ;;
+
+        events)
+            [[ -z $3 ]] && MAX_ITEMS=10 || MAX_ITEMS=$3
+
+            aws cloudformation describe-stack-events --stack-name ${STACK} \
+                --query 'StackEvents[*].[Timestamp,ResourceStatus,LogicalResourceId,ResourceStatusReason]' \
+                --output table \
+                --max-items ${MAX_ITEMS}
+            ;;
+
+        ec2-instances)
+            STACK_ID=$($0 id ${STACK})
+            ATTRS=$3
+            OUTPUT="--output text"
+
+            if [[ -z ${ATTRS} ]]; then
+                ATTRS=".[InstanceId,PublicIpAddress,PublicDnsName,PrivateIpAddress,PrivateDnsName]"
+            elif [[ ${ATTRS} == '*' ]]; then
+                ATTRS=""
+                OUTPUT=""
+            else
+                ATTRS=".[${ATTRS}]"
+            fi
+
+            aws ec2 describe-instances \
+                --query "Reservations[*].Instances[?Tags[?Value==\`${STACK_ID}\`]]${ATTRS}" \
+                ${OUTPUT}
+            ;;
+
+        *)
+            echo $"Usage $0 <command> <args>
+
+  $0 ls
+  $0 list-exports
+  $0 create <stack-name>
+  $0 update <stack-name>
+  $0 id <stack-name>
+  $0 create-change-set <stack-name>
+  $0 describe-change-set <stack-name> <change-set-name>
+  $0 execute-change-set <stack-name> <change-set-name>
+  $0 status <stack-name>
+  $0 estimate-template-cost <stack-name>
+  $0 resources <stack-name>
+  $0 events <stack-name> [max-events]
+  $0 ec2-instances <stack-name> [InstanceId,PublicIpAddress,...|'*']"
+
+            exit 1
+            ;;
+esac

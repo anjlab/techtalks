@@ -1,0 +1,95 @@
+import com.anjlab.gradle.docker.CachingDockerBuildImage
+import org.apache.tools.ant.filters.ReplaceTokens
+
+apply plugin: 'java'
+apply plugin: 'war'
+
+dependencies {
+    compileOnly "javax.servlet:javax.servlet-api:3.1.0"
+
+    compile("co.wrisk.logback:logback-ext-cloudwatch-appender:1.0.3")
+}
+
+//  Building docker image...
+apply plugin: 'com.bmuschko.docker-remote-api'
+
+configurations {
+    tomcatLibs
+}
+
+dependencies {
+    tomcatLibs 'com.orangefunction:tomcat-redis-session-manager:3.0.1-SATAGO'
+}
+
+task copyTomcatLibs(type: Sync) {
+    into "$buildDir/docker/tomcat-libs"
+    from configurations.tomcatLibs
+}
+
+def warExploded = "$buildDir/docker/war-exploded"
+def warExplodedChangesOften = "$buildDir/docker/war-exploded-changes-often"
+def warExplodedChangesRarely = "$buildDir/docker/war-exploded-changes-rarely"
+
+task explodeWar(type: Sync) {
+    dependsOn 'war'
+    // Unarchive WAR-file, this is to deploy it as a folder in container
+    from zipTree(war.archivePath)
+    into warExploded
+}
+
+// We split WAR contents in two folders to improve docker caching
+task copyRarelyChangedFilesForDocker(type: Sync) {
+    dependsOn explodeWar
+    into warExplodedChangesRarely
+    from(warExploded) {
+        include '**/*.jar'
+    }
+    includeEmptyDirs = false
+}
+
+task copyOftenChangedFilesForDocker(type: Sync) {
+    dependsOn copyRarelyChangedFilesForDocker
+    into warExplodedChangesOften
+    def changedRarely = []
+    from(warExploded) {
+        include "WEB-INF/web.xml"
+        filter(ReplaceTokens, tokens: [
+                'tomcat.https.begin': "-->",
+                'tomcat.https.end'  : "<!--"
+        ])
+    }
+    from(warExploded) {
+        exclude {
+            if (changedRarely.empty) {
+                changedRarely = fileTree(warExplodedChangesRarely).getFiles().collect {
+                    //  Build relative paths
+                    it.path.substring(warExplodedChangesRarely.length() + 1)
+                }
+            }
+            //  Here `it.path` is a path relative to `warExploded`
+            changedRarely.contains(it.path)
+        }
+        exclude "WEB-INF/web.xml"
+    }
+    includeEmptyDirs = false
+}
+
+task warForDocker {
+    dependsOn copyRarelyChangedFilesForDocker, copyOftenChangedFilesForDocker
+}
+
+task copyDockerContext(type: Sync) {
+    into "$buildDir/docker"
+    //  Dockerfile and other build resources
+    from "src/main/docker"
+}
+
+task prepareForDockerBuild {
+    dependsOn 'copyDockerContext', 'copyTomcatLibs', 'warForDocker'
+}
+
+task buildImage(type: CachingDockerBuildImage) {
+    dependsOn prepareForDockerBuild
+    inputDir = file("${buildDir}/docker")
+    tag = "${project.name}:${version}"
+}

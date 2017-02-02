@@ -1,0 +1,110 @@
+import com.anjlab.gradle.common.AppendFiles
+import com.anjlab.gradle.common.DeferredReplaceTokens
+
+def revisions = [
+        'my-app-v1'  :
+                ['deployableName'  : 'my-app-v1',
+                 'composeFiles'    : ['docker-compose.my-app-v1.yml'],
+                 'dockerBuildImage': ['project'     : project(':my-app-v1'),
+                                      'taskName'    : 'buildImage',
+                                      'ecrStackName': 'my-app-ecr']],
+
+        'my-services':
+                ['deployableName': 'my-services',
+                 'composeFiles'  : ['docker-compose.db.yml',
+                                    'docker-compose.redis.yml'],
+                 'resources'     : copySpec() {
+                     from('apps/my-services') {
+                         include 'docker-entrypoint-initdb.d/'
+                     }
+                 }]
+]
+
+task createRevisions
+
+apply plugin: 'com.bmuschko.docker-remote-api'
+
+revisions.each { revision ->
+
+    def copyTaskName = "copy-${revision.key}"
+
+    def getImageId = { '' }
+    def getEcrStackName = { '' }
+
+    task "$copyTaskName"(type: Sync) {
+        into "$buildDir/revisions/${revision.key}"
+        from('codedeploy-common-files/') {
+            exclude 'compose.env'
+        }
+        from file('bin/decrypt')
+        from('aws-codedeploy-samples/load-balancing') {
+            include 'elb/'
+        }
+        from('codedeploy-common-files/compose.env') {
+            filter(DeferredReplaceTokens, tokenGenerator: {
+                [
+                        imageId       : getImageId(),
+                        tag           : String.valueOf(version),
+                        composeFiles  : String.join(' ', revision.value.composeFiles),
+                        ecrStackName  : getEcrStackName(),
+                        buildTimestamp: new Date().format("yyyy-MM-dd HH:mm:ss")
+                ]
+            })
+        }
+        revision.value.composeFiles.each {
+            def file = file("apps/${it}")
+            if (!file.exists()) {
+                throw new InvalidUserDataException('docker-compose file not found: ' + file)
+            }
+            from file
+        }
+        with copySpec() {
+            into 'data'
+            from("apps/${revision.value.deployableName}/") {
+                //  `compose.env` file will be handled separately, it will be merged into single `compose.env`
+                exclude 'compose.env'
+            }
+        }
+        with revision.value.resources ?: {}
+    }
+
+    def copyTask = tasks[copyTaskName]
+
+    def concatTaskName = "concat-${revision.key}"
+
+    task "$concatTaskName"(type: AppendFiles) {
+        dependsOn copyTask
+        files = fileTree("apps/${revision.value.deployableName}") {
+            include 'compose.env'
+        }
+        target = file("$buildDir/revisions/${revision.key}/compose.env")
+        doFirst {
+            target.append("\nDEPLOYABLE_NAME=${revision.value.deployableName}")
+        }
+    }
+
+    copyTask.finalizedBy tasks[concatTaskName]
+
+    createRevisions.dependsOn copyTask
+
+    //  Not all revisions might need to build an image
+    def dockerBuildImage = revision.value.dockerBuildImage
+
+    def wireDockerBuildImageTask = { buildImageTask ->
+        copyTask.dependsOn buildImageTask
+        getImageId = { buildImageTask.getImageId() }
+    }
+
+    if (dockerBuildImage) {
+        getEcrStackName = { dockerBuildImage.ecrStackName }
+
+        Task dockerBuildImageTask = dockerBuildImage.project.tasks.findByName(dockerBuildImage.taskName)
+        if (dockerBuildImageTask == null) {
+            dockerBuildImage.project.afterEvaluate { evaluatedProject ->
+                wireDockerBuildImageTask(evaluatedProject.tasks[dockerBuildImage.taskName])
+            }
+        } else {
+            wireDockerBuildImageTask(dockerBuildImageTask)
+        }
+    }
+}

@@ -1,0 +1,10 @@
+#!/bin/bash
+set -e
+
+SCRIPT_PATH=$( cd $(dirname $0) ; pwd -P )
+
+KEY=$1
+PLAINTEXT=$2
+
+aws kms encrypt --query CiphertextBlob --output text \
+   --cli-input-json "{ \"KeyId\": \"${KEY}\", \"Plaintext\": \"${PLAINTEXT}\" }"

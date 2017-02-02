@@ -1,0 +1,9 @@
+apply plugin: "groovy"
+
+repositories {
+    jcenter()
+}
+
+dependencies {
+    compile 'com.bmuschko:gradle-docker-plugin:3.0.5'
+}

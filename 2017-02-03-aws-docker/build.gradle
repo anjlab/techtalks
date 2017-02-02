@@ -1,0 +1,20 @@
+import com.anjlab.gradle.git.WorkingTree
+
+def status = WorkingTree.status()
+
+allprojects {
+    buildscript {
+        repositories {
+            jcenter()
+        }
+    }
+
+    repositories {
+        jcenter()
+        maven {
+            url  "http://dl.bintray.com/satago/maven"
+        }
+    }
+
+    version = status.clean ? status.commit : "dirty-${status.branch}"
+}

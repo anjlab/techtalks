@@ -1,0 +1,154 @@
+#!/bin/bash
+set -e
+
+SCRIPT_PATH=$( cd $(dirname $0) ; pwd -P )
+
+CMD=$1
+
+function bucket_name {
+    ALIAS=$(aws iam list-account-aliases --query 'AccountAliases[0]' --output text)
+    echo "codedeploy-$ALIAS"
+}
+
+function physical_resource_id {
+    echo $(aws cloudformation list-stack-resources \
+            --stack-name $1 \
+            --query "StackResourceSummaries[?ResourceType==\`$2\`].PhysicalResourceId" \
+            --output text)
+}
+
+function read_output_value {
+    echo $(aws cloudformation describe-stacks \
+            --stack-name $1 \
+            --query "Stacks[*].Outputs[?OutputKey==\`$2\`].OutputValue" \
+            --output text)
+}
+
+case "$CMD" in
+        create-codedeploy-bucket)
+            BUCKET=$(bucket_name)
+            aws s3 mb s3://${BUCKET}
+            aws s3api put-bucket-versioning --bucket ${BUCKET} \
+                --versioning-configuration Status=Enabled
+            ;;
+
+        push)
+            STACK=$2
+            DEPLOYABLE_NAME=$3
+
+            REVISION_DIR=${SCRIPT_PATH}/../build/revisions/${DEPLOYABLE_NAME}
+
+            echo -e "*\n* Creating CodeDeploy revisions\n*"
+            ${SCRIPT_PATH}/../../gradlew createRevisions
+
+            echo -e "*\n* Tagging and pushing docker image\n*"
+            $0 docker-tag-and-push ${REVISION_DIR}
+
+            echo -e "*\n* Pushing CodeDeploy revision to S3 and initiating deployment\n*"
+            DEPLOYMENT_ID=`eval $($0 codedeploy-push ${STACK} ${REVISION_DIR}) --output text`
+
+            printf "$(date +%H:%M:%S) Deployment \"${DEPLOYMENT_ID}\""
+
+            PREV_STATUS=
+            PRINT_NEW_LINE=false
+            while true
+            do
+                STATUS=`$0 status ${DEPLOYMENT_ID}`
+                STATUS_LINE="$(date +%H:%M:%S) Deployment ${STATUS}"
+
+                if [[ -z ${PREV_STATUS} ]] || [[ ${PREV_STATUS} != ${STATUS} ]]; then
+                    if [[ ${PRINT_NEW_LINE} ]]; then
+                        echo
+                    fi
+                    printf "${STATUS_LINE}"
+                    PRINT_NEW_LINE=false
+                else
+                    printf "\r${STATUS_LINE}"
+                    PRINT_NEW_LINE=true
+                fi
+
+                if [[ ${STATUS} == '"Succeeded"' ]] || [[ ${STATUS} == '"Failed"' ]]; then
+                    exit 0
+                fi
+
+                PREV_STATUS=${STATUS}
+
+                sleep 1
+            done
+            ;;
+
+        docker-tag-and-push)
+            REVISION_DIR=$2
+
+            source ${REVISION_DIR}/compose.env
+
+            if [[ -z ${ECR_STACK_NAME} ]]; then
+                echo "No registry, nowhere to push"
+                exit 0
+            fi
+
+            TARGET_IMAGE=$(read_output_value ${ECR_STACK_NAME} ImageURI)
+
+            docker tag ${APP_IMAGE_ID} ${TARGET_IMAGE}:${APP_TAG}
+
+            $(aws ecr get-login)
+
+            docker push ${TARGET_IMAGE}:${APP_TAG}
+
+            echo -e \
+                "\n# Added by $0 \
+                 \nAPP_IMAGE_ID=${TARGET_IMAGE}" >> ${REVISION_DIR}/compose.env
+            ;;
+
+        codedeploy-push)
+            STACK=$2
+            REVISION_DIR=$3
+
+            APP_NAME=$(physical_resource_id ${STACK} AWS::CodeDeploy::Application)
+
+            CREATE_DEPLOYMENT=$(aws deploy push --application-name ${APP_NAME} \
+                --s3-location s3://$(bucket_name)/${STACK}.zip \
+                --source ${REVISION_DIR} \
+                | tail -n 1)
+
+            DG_NAME=$(physical_resource_id ${STACK} AWS::CodeDeploy::DeploymentGroup)
+            DC_NAME=$(physical_resource_id ${STACK} AWS::CodeDeploy::DeploymentConfig)
+
+            if [[ -z ${DC_NAME}  ]]; then
+                DC_NAME="CodeDeployDefault.OneAtATime"
+            fi
+
+            DG_NAME_TEMPLATE="<deployment-group-name>"
+            DC_NAME_TEMPLATE="<deployment-config-name>"
+            DESCRIPTION_TEMPLATE="<description>"
+
+            CREATE_DEPLOYMENT=${CREATE_DEPLOYMENT/${DG_NAME_TEMPLATE}/${DG_NAME}}
+            CREATE_DEPLOYMENT=${CREATE_DEPLOYMENT/${DC_NAME_TEMPLATE}/${DC_NAME}}
+            CREATE_DEPLOYMENT=${CREATE_DEPLOYMENT/${DESCRIPTION_TEMPLATE}/\'Deploy after push\'}
+
+            echo ${CREATE_DEPLOYMENT} \
+                --auto-rollback-configuration enabled=true,events=DEPLOYMENT_FAILURE \
+                --ignore-application-stop-failures
+            ;;
+
+        status)
+            aws deploy get-deployment --deployment-id $2 --query 'deploymentInfo.status'
+            ;;
+
+        wait)
+            aws deploy wait deployment-successful --deployment-id $2
+            ;;
+
+        *)
+            echo $"Usage $0 <command> <args>
+
+  $0 create-codedeploy-bucket
+  $0 docker-tag-and-push <stack-name> <revision-dir>
+  $0 codedeploy-push <stack-name> <revision-dir>
+  $0 status <deployment-id>
+  $0 wait <deployment-id>
+  $0 push <stack-name> <deployable-name>"
+
+            exit 1
+            ;;
+esac

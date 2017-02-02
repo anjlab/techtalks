@@ -1,0 +1,8 @@
+version: '2'
+services:
+
+  elasticsearch:
+    image: elasticsearch:1.5
+    ports:
+      - 9200
+      - 9300

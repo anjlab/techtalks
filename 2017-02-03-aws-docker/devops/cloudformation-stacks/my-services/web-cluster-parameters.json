@@ -1,0 +1,22 @@
+[
+  {
+    "ParameterKey": "InstanceType",
+    "ParameterValue": "t2.nano"
+  },
+  {
+    "ParameterKey": "ImageId",
+    "ParameterValue": "ami-af0fc0c0"
+  },
+  {
+    "ParameterKey": "DesiredCapacity",
+    "ParameterValue": "1"
+  },
+  {
+    "ParameterKey": "KeyName",
+    "ParameterValue": "techtalks20170203-key-pair-eu-central-1"
+  },
+  {
+    "ParameterKey": "CreateELB",
+    "ParameterValue": "false"
+  }
+]

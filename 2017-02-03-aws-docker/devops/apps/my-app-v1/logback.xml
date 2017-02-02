@@ -1,0 +1,8 @@
+<configuration scan="true" scanPeriod="30 seconds">
+
+    <property file="/opt/example/my-app-v1.properties" />
+    <include file="/opt/example/logback.appenders.xml" />
+
+    <logger name="com.example" level="INFO" />
+
+</configuration>
