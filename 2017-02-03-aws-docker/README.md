@@ -1,3 +1,5 @@
+Slides for this talk can be found in [keynote/anjlab-techtalks-2017-02-03-aws-docker.pdf](https://github.com/anjlab/techtalks/tree/master/2017-02-03-aws-docker/keynote/anjlab-techtalks-2017-02-03-aws-docker.pdf).
+
 ## Prerequisites
 
 >Note: We assume that all stacks and other resources, like Customer Master Keys, live in the same AWS Region.
