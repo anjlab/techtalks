@@ -26,6 +26,17 @@ case "$CMD" in
                 --output table
             ;;
 
+        create-access-logs-bucket)
+            # http://stackoverflow.com/a/33791322
+            ACCOUNT_ID=$(aws ec2 describe-security-groups \
+                --group-names 'Default' \
+                --query 'SecurityGroups[0].OwnerId' \
+                --output text)
+
+            BUCKET="${ACCOUNT_ID}-${STACK}"
+            aws s3 mb s3://${BUCKET}
+            ;;
+
         id)
             aws cloudformation describe-stacks --stack-name ${STACK} \
                 --query 'Stacks[0].StackId' --output text
@@ -167,6 +178,7 @@ case "$CMD" in
             echo $"Usage $0 <command> <args>
 
   $0 create <stack-name>
+  $0 create-access-logs-bucket <stack-name>
   $0 create-change-set <stack-name>
   $0 describe-change-set <stack-name> <change-set-name>
   $0 ec2-instances <stack-name> [InstanceId,PublicIpAddress,...|'*']

@@ -2,7 +2,7 @@
 
 >Note: We assume that all stacks and other resources, like Customer Master Keys, live in the same AWS Region.
 
->AMI `ImageID`s used in parameters of sample apps taken from Frankfurt region (`eu-central-1`). Make sure to update them if you like to run this tutorial in another region.
+>AMI `ImageID`s and `ELBAccountId`s used this tutorial only provided for the Frankfurt region (`eu-central-1`). Make sure to update the `RegionMap` mapping in `devops/cloudformation-templates/web-cluster-template.json` if you want to run this tutorial in another region.
 
 
 1. Create IAM user for AWS CLI (`techtalks20170203`)
@@ -69,7 +69,15 @@
 
 4. Copy certificate's ARN into `devops/cloudformation-stacks/my-app/web-cluster-parameters.json`
 
-5. Now everything is ready to create our first stack:
+5. ELB can publish HTTP access logs to S3, in order to use this feature we need to create target S3 bucket and enable the logging via `EnableELBAccessLogging` template parameter (off by default).
+
+    To create the bucket run:
+    ```
+    $ devops/bin/stack create-access-logs-bucket my-app
+    make_bucket: 626307895833-my-app
+    ```
+
+6. Now everything is ready to create our first stack:
     ```
     $ devops/bin/stack create my-app
     {
@@ -77,7 +85,7 @@
     }
     ```
 
-6. Our app will use some external services, i.e. Redis for centralized session management.
+7. Our app will use some external services, i.e. Redis for centralized session management.
 
    In this tutorial we'll host Redis on its own EC2 instance using same stack template as `my-app` but with different parameters, i.e. no Elastic Load Balancer (ELB).
     ```
@@ -87,7 +95,7 @@
     }
     ```
 
-7. Our deployments will use private Docker registry provided by Elastic Container Registry (ECR) to host our app's images, let's create it:
+8. Our deployments will use private Docker registry provided by Elastic Container Registry (ECR) to host our app's images, let's create it:
     ```
     $ devops/bin/stack create my-app-ecr
     {
@@ -95,7 +103,7 @@
     }
     ```
 
-8. Create Customer Master Key for secured properties
+9. Create Customer Master Key for secured properties
     ```
     $ aws kms create-key
     {
@@ -117,7 +125,7 @@
         --target-key-id a6429aaa-2f55-4d7d-8d7a-34ff1b8d0530
     ```
 
-9. Create S3 bucket for CodeDeploy:
+10. Create S3 bucket for CodeDeploy:
     ```
     $ devops/bin/deploy create-codedeploy-bucket
     ```

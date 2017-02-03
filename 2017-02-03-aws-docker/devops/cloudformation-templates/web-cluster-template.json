@@ -42,6 +42,13 @@
       "Default": "false",
       "AllowedValues": ["true", "false"],
       "ConstraintDescription": "true or false (default)"
+    },
+    "EnableELBAccessLogging": {
+      "Description": "Write ELB access logs to S3LoggingBucket",
+      "Type": "String",
+      "Default": "false",
+      "AllowedValues": ["true", "false"],
+      "ConstraintDescription": "true or false (default)"
     }
   },
   "Conditions": {
@@ -97,6 +104,7 @@
     "MyELB": {
       "Type": "AWS::ElasticLoadBalancing::LoadBalancer",
       "Condition": "CreateELB",
+      "DependsOn": "MyS3LoggingBucketPolicy",
       "Properties": {
         "ConnectionDrainingPolicy": {
           "Enabled": "true",
@@ -144,6 +152,14 @@
           "Interval": "10",
           "Timeout": "5"
         },
+        "AccessLoggingPolicy": {
+          "S3BucketName": {
+            "Fn::Join": ["-", [{ "Ref": "AWS::AccountId"}, { "Ref": "AWS::StackName" }]]
+          },
+          "S3BucketPrefix": "ELBLogs",
+          "Enabled": { "Ref": "EnableELBAccessLogging" },
+          "EmitInterval" : "5"
+        },
         "Policies": [
           {
             "PolicyName": "MySSLNegotiationPolicy",
@@ -156,6 +172,41 @@
             ]
           }
         ]
+      }
+    },
+    "MyS3LoggingBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Condition": "CreateELB",
+      "Properties": {
+        "Bucket": {
+          "Fn::Join": ["-", [{ "Ref": "AWS::AccountId"}, { "Ref": "AWS::StackName" }]]
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [ {
+            "Sid": "ELBAccessLogs20130930",
+            "Effect": "Allow",
+            "Resource": {
+              "Fn::Join": ["",
+                [
+                  "arn:aws:s3:::",
+                  { "Fn::Join": ["-", [{ "Ref": "AWS::AccountId"}, { "Ref": "AWS::StackName" }]] },
+                  "/",
+                  "ELBLogs",
+                  "/AWSLogs/",
+                  { "Ref": "AWS::AccountId" },
+                  "/*"
+                ]
+              ]
+            },
+            "Principal": { "AWS": {
+              "Fn::FindInMap": ["RegionMap", { "Ref": "AWS::Region" }, "ELBAccountId"]
+            }},
+            "Action": [
+              "s3:PutObject"
+            ]
+          } ]
+        }
       }
     },
     "MyInstanceLaunchConfig": {

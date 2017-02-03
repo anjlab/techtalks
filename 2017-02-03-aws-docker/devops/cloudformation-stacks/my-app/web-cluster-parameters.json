@@ -26,5 +26,9 @@
   {
     "ParameterKey": "UseCookieStickinessPolicy",
     "ParameterValue": "true"
+  },
+  {
+    "ParameterKey": "EnableELBAccessLogging",
+    "ParameterValue": "true"
   }
 ]
