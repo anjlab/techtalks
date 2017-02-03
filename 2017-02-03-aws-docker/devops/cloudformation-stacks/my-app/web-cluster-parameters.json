@@ -4,10 +4,6 @@
     "ParameterValue": "t2.nano"
   },
   {
-    "ParameterKey": "ImageId",
-    "ParameterValue": "ami-af0fc0c0"
-  },
-  {
     "ParameterKey": "DesiredCapacity",
     "ParameterValue": "1"
   },

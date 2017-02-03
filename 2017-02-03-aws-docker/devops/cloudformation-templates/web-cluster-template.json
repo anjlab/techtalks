@@ -7,10 +7,6 @@
       "Type": "String",
       "Default": "t2.nano"
     },
-    "ImageId": {
-      "Description": "Image ID for EC2 instances",
-      "Type": "String"
-    },
 
     "DesiredCapacity": {
       "Description": "Desired capacity in AutoScaling Group",
@@ -54,6 +50,11 @@
     },
     "UseCookieStickinessPolicy": {
       "Fn::Equals": [{ "Ref": "UseCookieStickinessPolicy" }, "true"]
+    }
+  },
+  "Mappings": {
+    "RegionMap": {
+      "eu-central-1": { "AMI": "ami-af0fc0c0", "ELBAccountId": "054676820928" }
     }
   },
   "Resources": {
@@ -339,7 +340,7 @@
         }
       },
       "Properties": {
-        "ImageId": { "Ref": "ImageId" },
+        "ImageId": { "Fn::FindInMap": ["RegionMap", { "Ref": "AWS::Region" }, "AMI"] },
         "InstanceType": { "Ref": "InstanceType" },
         "KeyName": { "Ref": "KeyName" },
         "SecurityGroups": [{ "Ref": "MyInstanceSecurityGroup" }],
