@@ -72,7 +72,49 @@ case "$CMD" in
         execute-change-set)
             CHANGESET_NAME=$3
             aws cloudformation execute-change-set --stack-name ${STACK} --change-set-name ${CHANGESET_NAME} \
-            && echo $0 status ${STACK}
+            && echo $0 wait ${STACK}
+            ;;
+
+        wait)
+            printf "$(date +%H:%M:%S) Waiting for stack update"
+
+            PREV_STATUS=
+            PRINT_NEW_LINE=false
+            while true
+            do
+                STATUS=`$0 status ${STACK}`
+                STATUS_LINE="$(date +%H:%M:%S) ${STATUS}"
+
+                if [[ -z ${PREV_STATUS} ]] || [[ ${PREV_STATUS} != ${STATUS} ]]; then
+                    if [[ ${PRINT_NEW_LINE} ]]; then
+                        echo
+                    fi
+                    printf "${STATUS_LINE}"
+                    PRINT_NEW_LINE=false
+                else
+                    printf "\r${STATUS_LINE}"
+                    PRINT_NEW_LINE=true
+                fi
+
+                # Wait for one of the terminal statuses
+                # http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-describing-stacks.html
+                if [[ ${STATUS} == 'CREATE_COMPLETE' ]] ||
+                   [[ ${STATUS} == 'CREATE_FAILED' ]] ||
+                   [[ ${STATUS} == 'DELETE_COMPLETE' ]] ||
+                   [[ ${STATUS} == 'DELETE_FAILED' ]] ||
+                   [[ ${STATUS} == 'ROLLBACK_COMPLETE' ]] ||
+                   [[ ${STATUS} == 'ROLLBACK_FAILED' ]] ||
+                   [[ ${STATUS} == 'UPDATE_COMPLETE' ]] ||
+                   [[ ${STATUS} == 'UPDATE_ROLLBACK_COMPLETE' ]] ||
+                   [[ ${STATUS} == 'UPDATE_ROLLBACK_FAILED' ]] ||
+                   [[ ${STATUS} == 'CREATE_FAILED' ]]; then
+                        exit 0
+                fi
+
+                PREV_STATUS=${STATUS}
+
+                sleep 1
+            done
             ;;
 
         status)
@@ -124,20 +166,20 @@ case "$CMD" in
         *)
             echo $"Usage $0 <command> <args>
 
-  $0 ls
-  $0 list-exports
   $0 create <stack-name>
-  $0 update <stack-name>
-  $0 id <stack-name>
   $0 create-change-set <stack-name>
   $0 describe-change-set <stack-name> <change-set-name>
-  $0 execute-change-set <stack-name> <change-set-name>
-  $0 status <stack-name>
+  $0 ec2-instances <stack-name> [InstanceId,PublicIpAddress,...|'*']
   $0 estimate-template-cost <stack-name>
-  $0 resources <stack-name>
   $0 events <stack-name> [max-events]
-  $0 ec2-instances <stack-name> [InstanceId,PublicIpAddress,...|'*']"
-
+  $0 execute-change-set <stack-name> <change-set-name>
+  $0 id <stack-name>
+  $0 list-exports
+  $0 ls
+  $0 resources <stack-name>
+  $0 status <stack-name>
+  $0 update <stack-name>
+  $0 wait <stack-name>"
             exit 1
             ;;
 esac
