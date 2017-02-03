@@ -15,7 +15,7 @@ import java.io.IOException;
 import java.util.Optional;
 import java.util.Properties;
 
-import static com.example.Utils.getVersion;
+import static com.example.Utils.verboseOutput;
 import static com.example.Utils.readPropertiesFromFile;
 import static java.lang.String.format;
 import static java.lang.System.getProperty;
@@ -43,8 +43,7 @@ public class HelloWorld implements Filter
 
     response.setContentType("text/plain");
     response.getWriter().print(
-            format("Welcome to AnjLab TechTalks! %s\n",
-                    getVersion(request)));
+            format("AnjLab TechTalks! %s\n", verboseOutput(request)));
   }
 
   private void sleep(ServletRequest request)

@@ -13,7 +13,7 @@ public class Utils
 {
   private static final Logger logger = LoggerFactory.getLogger(Utils.class);
 
-  static String getVersion(ServletRequest request)
+  static String verboseOutput(ServletRequest request)
   {
     if (!request.getParameterMap().containsKey("verbose"))
     {
