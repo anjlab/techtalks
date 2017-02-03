@@ -69,7 +69,18 @@
 
 4. Copy certificate's ARN into `devops/cloudformation-stacks/my-app/web-cluster-parameters.json`
 
-5. Now everything is ready to create our first stack:
+5. In order to create an Application Load Balancer (ALB) we need to specify VPC and a list of Subnets in `devops/cloudformation-stacks/my-app/web-cluster-parameters.json`:
+    ```
+    $ aws ec2 describe-subnets --query 'Subnets[*].[VpcId,SubnetId]' --output table
+      -------------------------------------
+      |          DescribeSubnets          |
+      +---------------+-------------------+
+      |  vpc-24a0044c |  subnet-d8e481b0  |
+      |  vpc-24a0044c |  subnet-77ee400d  |
+      +---------------+-------------------+
+    ```
+
+6. Now everything is ready to create our first stack:
     ```
     $ devops/bin/stack create my-app
     {
@@ -77,7 +88,7 @@
     }
     ```
 
-6. Our app will use some external services, i.e. Redis for centralized session management.
+7. Our app will use some external services, i.e. Redis for centralized session management.
 
    In this tutorial we'll host Redis on its own EC2 instance using same stack template as `my-app` but with different parameters, i.e. no Elastic Load Balancer (ELB).
     ```
@@ -87,7 +98,7 @@
     }
     ```
 
-7. Our deployments will use private Docker registry provided by Elastic Container Registry (ECR) to host our app's images, let's create it:
+8. Our deployments will use private Docker registry provided by Elastic Container Registry (ECR) to host our app's images, let's create it:
     ```
     $ devops/bin/stack create my-app-ecr
     {
@@ -95,7 +106,7 @@
     }
     ```
 
-8. Create Customer Master Key for secured properties
+9. Create Customer Master Key for secured properties
     ```
     $ aws kms create-key
     {
@@ -117,7 +128,7 @@
         --target-key-id a6429aaa-2f55-4d7d-8d7a-34ff1b8d0530
     ```
 
-9. Create S3 bucket for CodeDeploy:
+10. Create S3 bucket for CodeDeploy:
     ```
     $ devops/bin/deploy create-codedeploy-bucket
     ```

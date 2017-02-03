@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "AutoScaling Group of Docker & CodeDeploy powered instances behind an ELB",
+  "Description": "AutoScaling Group of Docker & CodeDeploy powered instances behind an ALB",
   "Parameters": {
     "InstanceType" : {
       "Description" : "Type of EC2 instance in the cluster",
@@ -24,24 +24,32 @@
       "ConstraintDescription" : "must be the name of an existing EC2 KeyPair"
     },
 
-    "CreateELB": {
-      "Description": "Create ELB and associate with this AutoScaling Group",
+    "CreateALB": {
+      "Description": "Create ALB and associate with this AutoScaling Group",
       "Type": "String",
       "AllowedValues": ["true", "false"],
       "ConstraintDescription": "true (default) or false"
     },
+    "ALBVpc": {
+      "Description": "VPC for ALB",
+      "Type": "AWS::EC2::VPC::Id"
+    },
+    "ALBSubnets": {
+      "Description": "List of subnets for ALB",
+      "Type": "List<AWS::EC2::Subnet::Id>"
+    },
     "SSLCertificateId": {
-      "Description": "ARN of SSL Certificate for ELB",
+      "Description": "ARN of SSL Certificate for ALB",
       "Type": "String",
       "Default": ""
     },
     "HealthCheckTarget": {
-      "Description": "ELB HealthCheck target",
+      "Description": "ALB HealthCheck target",
       "Type": "String",
       "Default": "HTTP:8080/"
     },
     "UseCookieStickinessPolicy": {
-      "Description": "Enable ELB sticky sessions based on cookies",
+      "Description": "Enable ALB sticky sessions based on cookies",
       "Type": "String",
       "Default": "false",
       "AllowedValues": ["true", "false"],
@@ -49,8 +57,8 @@
     }
   },
   "Conditions": {
-    "CreateELB": {
-      "Fn::Equals": [{ "Ref": "CreateELB" }, "true"]
+    "CreateALB": {
+      "Fn::Equals": [{ "Ref": "CreateALB" }, "true"]
     },
     "UseCookieStickinessPolicy": {
       "Fn::Equals": [{ "Ref": "UseCookieStickinessPolicy" }, "true"]
@@ -67,13 +75,7 @@
         "MinSize": "1",
         "DesiredCapacity": { "Ref": "DesiredCapacity" },
         "MaxSize": "4",
-        "LoadBalancerNames": [{
-          "Fn::If": [
-            "CreateELB",
-            { "Ref": "MyELB" },
-            { "Ref": "AWS::NoValue" }
-          ]
-        }]
+        "TargetGroupARNs": [{ "Ref": "MyALBTargetGroup" }]
       },
       "CreationPolicy": {
         "AutoScalingCreationPolicy" : {
@@ -93,68 +95,68 @@
         }
       }
     },
-    "MyELB": {
-      "Type": "AWS::ElasticLoadBalancing::LoadBalancer",
-      "Condition": "CreateELB",
+    "MyALB": {
+      "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "Condition": "CreateALB",
       "Properties": {
-        "ConnectionDrainingPolicy": {
-          "Enabled": "true",
-          "Timeout": "300"
-        },
-        "ConnectionSettings": {
-          "IdleTimeout": "60"
-        },
-        "CrossZone": "true",
-        "AvailabilityZones": { "Fn::GetAZs": "" },
-        "LBCookieStickinessPolicy": [{
-          "PolicyName": "CookieBasedPolicy",
-          "CookieExpirationPeriod": "10"
+        "Scheme": "internet-facing",
+        "Subnets": { "Ref": "ALBSubnets" },
+        "SecurityGroups": [{ "Fn::GetAtt": [ "MyALBSecurityGroup", "GroupId" ]}]
+      }
+    },
+    "MyALBHttpsListener": {
+      "Type": "AWS::ElasticLoadBalancingV2::Listener",
+      "Properties": {
+        "Protocol": "HTTPS",
+        "Port": "443",
+        "Certificates": [{"CertificateArn": { "Ref": "SSLCertificateId" }}],
+        "DefaultActions": [{
+          "Type": "forward",
+          "TargetGroupArn": { "Ref": "MyALBTargetGroup" }
         }],
-        "Listeners": [{
-          "LoadBalancerPort": "80",
-          "InstancePort": "8080",
-          "Protocol": "HTTP",
-          "PolicyNames": [{
-            "Fn::If": [
-              "UseCookieStickinessPolicy",
-              "CookieBasedPolicy",
-              { "Ref": "AWS::NoValue" }
-            ]
-          }]
-        }, {
-          "LoadBalancerPort": "443",
-          "InstancePort": "8080",
-          "Protocol": "HTTPS",
-          "PolicyNames": [{
-              "Fn::If": [
-                "UseCookieStickinessPolicy",
-                "CookieBasedPolicy",
-                { "Ref": "AWS::NoValue" }
-              ]
-            },
-            "MySSLNegotiationPolicy"
-          ],
-          "SSLCertificateId": { "Ref": "SSLCertificateId" }
+        "LoadBalancerArn": { "Ref": "MyALB" }
+      }
+    },
+    "MyALBHttpListener": {
+      "Type": "AWS::ElasticLoadBalancingV2::Listener",
+      "Properties": {
+        "Protocol": "HTTP",
+        "Port": "80",
+        "DefaultActions": [{
+          "Type": "forward",
+          "TargetGroupArn": { "Ref": "MyALBTargetGroup" }
         }],
-        "HealthCheck": {
-          "Target": { "Ref": "HealthCheckTarget" },
-          "HealthyThreshold": "2",
-          "UnhealthyThreshold": "5",
-          "Interval": "10",
-          "Timeout": "5"
-        },
-        "Policies": [
-          {
-            "PolicyName": "MySSLNegotiationPolicy",
-            "PolicyType": "SSLNegotiationPolicyType",
-            "Attributes": [
-              {
-                "Name": "Reference-Security-Policy",
-                "Value": "ELBSecurityPolicy-2016-08"
-              }
-            ]
-          }
-        ]
+        "LoadBalancerArn": { "Ref": "MyALB" }
+      }
+    },
+    "MyALBTargetGroup" : {
+      "Type" : "AWS::ElasticLoadBalancingV2::TargetGroup",
+      "Properties" : {
+        "HealthCheckIntervalSeconds" : 10,
+        "HealthCheckTimeoutSeconds": 5,
+        "HealthyThresholdCount": 2,
+        "UnhealthyThresholdCount" : 5,
+        "HealthCheckPath" : "/",
+        "Port" : 8080,
+        "Protocol" : "HTTP",
+        "VpcId" : { "Ref": "ALBVpc" }
+      }
+    },
+    "MyALBSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "HTTP and HTTPS from Internet",
+        "SecurityGroupIngress": [{
+          "IpProtocol": "tcp",
+          "FromPort": "80",
+          "ToPort": "80",
+          "CidrIp": "0.0.0.0/0"
+        },{
+          "IpProtocol": "tcp",
+          "FromPort": "443",
+          "ToPort": "443",
+          "CidrIp": "0.0.0.0/0"
+        }]
       }
     },
     "MyInstanceLaunchConfig": {
@@ -506,14 +508,12 @@
               "kms:Decrypt",
 
               "elasticloadbalancing:Describe*",
-              "elasticloadbalancing:DeregisterInstancesFromLoadBalancer",
-              "elasticloadbalancing:RegisterInstancesWithLoadBalancer",
+              "elasticloadbalancing:DeregisterTargets",
+              "elasticloadbalancing:RegisterTargets",
               "autoscaling:Describe*",
               "autoscaling:EnterStandby",
               "autoscaling:ExitStandby",
-              "autoscaling:UpdateAutoScalingGroup",
-              "autoscaling:SuspendProcesses",
-              "autoscaling:ResumeProcesses"
+              "autoscaling:UpdateAutoScalingGroup"
             ],
             "Resource": "*"
           }]
@@ -539,7 +539,7 @@
       "Value": {
         "Fn::Join": ["", [
           "http://",
-          { "Fn::GetAtt": ["MyELB", "DNSName"] }
+          { "Fn::GetAtt": ["MyALB", "DNSName"] }
         ]]
       },
       "Export" : {
@@ -547,7 +547,7 @@
           "Fn::Join" : [ ":", [ { "Ref" : "AWS::StackName" }, "ApplicationURL" ] ]
         }
       },
-      "Condition": "CreateELB"
+      "Condition": "CreateALB"
     }
   }
 }

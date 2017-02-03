@@ -37,8 +37,8 @@ revisions.each { revision ->
             exclude 'compose.env'
         }
         from file('bin/decrypt')
-        from('aws-codedeploy-samples/load-balancing') {
-            include 'elb/'
+        from('aws-codedeploy-samples/load-balancing/elb-v2/') {
+            into 'elb'
         }
         from('codedeploy-common-files/compose.env') {
             filter(DeferredReplaceTokens, tokenGenerator: {

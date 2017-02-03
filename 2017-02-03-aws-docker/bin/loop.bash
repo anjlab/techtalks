@@ -3,7 +3,7 @@ set -e
 
 SCRIPT_PATH=$( cd $(dirname $0) ; pwd -P )
 
-URL="https://my-app-myelb-von3abgbwp4e-1983353236.eu-central-1.elb.amazonaws.com?${@}"
+URL="https://my-ap-MyALB-10L15DBDUL0W9-435170741.eu-central-1.elb.amazonaws.com?${@}"
 
 PREV_RESPONSE=
 COOKIES_FILE=${SCRIPT_PATH}/cookies.tmp$(date +%s)

@@ -1,0 +1,42 @@
+[
+  {
+    "ParameterKey": "InstanceType",
+    "ParameterValue": "t2.nano"
+  },
+  {
+    "ParameterKey": "ImageId",
+    "ParameterValue": "ami-af0fc0c0"
+  },
+  {
+    "ParameterKey": "DesiredCapacity",
+    "ParameterValue": "2"
+  },
+  {
+    "ParameterKey": "KeyName",
+    "ParameterValue": "techtalks20170203-key-pair-eu-central-1"
+  },
+  {
+    "ParameterKey": "CreateALB",
+    "ParameterValue": "true"
+  },
+  {
+    "ParameterKey": "SSLCertificateId",
+    "ParameterValue": "arn:aws:acm:eu-central-1:626307895833:certificate/4c687a87-b636-4d83-a946-d6c7bf17df69"
+  },
+  {
+    "ParameterKey": "HealthCheckTarget",
+    "ParameterValue": "HTTP:8080/"
+  },
+  {
+    "ParameterKey": "UseCookieStickinessPolicy",
+    "ParameterValue": "true"
+  },
+  {
+    "ParameterKey": "ALBVpc",
+    "ParameterValue": "vpc-24a0044c"
+  },
+  {
+    "ParameterKey": "ALBSubnets",
+    "ParameterValue": "subnet-d8e481b0, subnet-77ee400d"
+  }
+]
