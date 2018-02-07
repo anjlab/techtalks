@@ -1,0 +1,1 @@
+Слайды по ссылке: [http://slides.com/nickzhebrun/react-native](http://slides.com/nickzhebrun/react-native)
